@@ -1,49 +1,37 @@
-// api/update-calendar.js
-import fetch from 'node-fetch';
+async function writeFile(path, contentObj) {
+  const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
+  let sha = undefined;
 
-export default async function handler(req, res) {
-  if (req.method !== "POST") return res.status(405).send("Only POST");
+  // 嘗試抓取現有檔案 SHA
+  const getRes = await fetch(url, {
+    headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' }
+  });
 
-  const { calendar, log } = req.body;
-  if (!calendar || !log) {
-    return res.status(400).json({ error: "Missing calendar or log" });
+  if (getRes.ok) {
+    const json = await getRes.json();
+    sha = json.sha;
   }
 
-  const owner = process.env.GH_OWNER;
-  const repo = process.env.GH_REPO;
-  const token = process.env.GH_TOKEN;
+  const base64 = Buffer.from(JSON.stringify(contentObj, null, 2)).toString('base64');
+  const body = {
+    message: `Update ${path}`,
+    content: base64,
+    ...(sha ? { sha } : {})  // 只有有 sha 才傳入
+  };
 
-  async function writeFile(path, contentObj) {
-    const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
-    const getRes = await fetch(url, {
-      headers: { Authorization: `token ${token}`, Accept: 'application/vnd.github.v3+json' }
-    });
-    const jsonGet = await getRes.json();
-    const sha = jsonGet.sha;
+  const commitRes = await fetch(url, {
+    method: "PUT",
+    headers: {
+      Authorization: `token ${token}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(body)
+  });
 
-    const base64 = Buffer.from(JSON.stringify(contentObj, null, 2)).toString('base64');
-    const commitRes = await fetch(url, {
-      method: "PUT",
-      headers: { Authorization: `token ${token}` },
-      body: JSON.stringify({
-        message: `Update ${path}`,
-        content: base64,
-        sha
-      })
-    });
-    if (!commitRes.ok) {
-      const err = await commitRes.json();
-      throw new Error(`Failed ${path}: ${err.message}`);
-    }
-    return await commitRes.json();
+  if (!commitRes.ok) {
+    const err = await commitRes.text();
+    throw new Error(`❌ 寫入 ${path} 失敗: ${err}`);
   }
 
-  try {
-    await writeFile('data/calendar.json', calendar);
-    await writeFile('data/calendar-log.json', log);
-    return res.status(200).json({ ok: true });
-  } catch (e) {
-    console.error(e);
-    return res.status(500).json({ error: e.message });
-  }
+  return await commitRes.json();
 }
