@@ -14,7 +14,7 @@ export default async function handler(req, res) {
 
   async function writeFile(path, contentObj) {
     const url = `https://api.github.com/repos/${owner}/${repo}/contents/${path}`;
-    let sha = undefined;
+    let sha;
 
     // 嘗試抓取現有檔案 SHA
     const getRes = await fetch(url, {
@@ -30,7 +30,7 @@ export default async function handler(req, res) {
     const body = {
       message: `Update ${path}`,
       content: base64,
-      ...(sha ? { sha } : {})  // 有 sha 才加入
+      ...(sha ? { sha } : {})  // 有 sha 才加進去
     };
 
     const commitRes = await fetch(url, {
